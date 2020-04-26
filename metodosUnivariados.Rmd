@@ -1,0 +1,225 @@
+---
+title: "Introducción a los pronósticos con R"
+author: Rodrigo Chang
+date: mayo de 2020
+output:
+  revealjs::revealjs_presentation:
+    transition: fade
+    theme: simple
+    highlight: tango
+    center: false
+    fig_width: 7
+    fig_height: 5
+    self_contained: false
+    reveal_plugins: ["zoom", "chalkboard"]
+    reveal_options:
+      slideNumber: true
+      chalkboard:
+        theme: whiteboard
+        toggleNotesButton: false
+---
+
+# ¿Para qué pronosticamos?
+
+- En muchas situaciones, requerimos pronósticos para la **toma de decisiones**.
+
+- Algunas cosas son más fáciles de pronosticar que otras:
+  - ¿Qué tan bien conocemos los factores que influyen?
+  - ¿Cuántos datos tenemos disponibles?
+  - Si los pronósticos pueden afectar aquello que intentamos pronosticar.
+  
+- Los métodos de pronóstico intentan capturar la forma en que varían las cosas: **proceso generador de datos**.
+  
+
+----
+
+- Debemos estar conscientes de las limitaciones: 50% - 50%
+
+- Los métodos de pronóstico pueden variar por:
+  - **tipos de patrones de datos**: tendencia, estacionalidad, volatilidad.
+  - **complejidad**: desde el pronóstico ingenuo, promedios, suavizamiento exponencial hasta redes neuronales y sistemas econométricos (e.g modelos VAR).
+  - la **cantidad de datos disponibles**: pronósticos de juicio
+
+
+# Horizonte de pronóstico
+
+- Dependiendo de la aplicación, **cada organización** o persona puede clasificar sus pronóstico como: 
+
+  - de **corto plazo**: por ejemplo, calendarización de personal, producción, transportes, demanda de productos.
+
+  - de **mediano plazo**: requerimientos de materiales, maquinaria.
+  
+  - de **largo plazo**: planeación estratégica, oportunidades de mercado.
+
+
+# Métodos de pronóstico
+
+- **Cualitativos**: cuando no hay información disponible o relevante para los pronósticos deseados.
+
+- **Cuantitativos**: cuando existe información numérica del pasado y está disponible. Usualmente, los métodos **asumen** que los patrones pasados podrían seguirse dando en el futuro.
+
+  - Series de tiempo: precios de acciones, índice de precios al consumidor, ventas trimestrales de una empresa, PIB anual. 
+  
+  
+  
+# Modelos de series de tiempo
+
+- Resultan útiles para pronosticar series de tiempo, por ejemplo el **modelo explicativo**: 
+
+$$\begin{eqnarray}
+\text{Demanda eléctrica} = f(\text{temperatura}, \text{actividad económica}, \nonumber \\ 
+\text{población}, \text{hora del día}, \nonumber \\ 
+\text{día de la semana}, \text{error}) 
+\end{eqnarray}$$
+
+- Modelos de series de tiempo: 
+$$ DE_{t+1} = f(DE_t, DE_{t-1}, DE_{t-2}, \ldots, \text{error})$$
+  
+- Algunos de estos modelos son: de descomposición, suavizamiento exponencial, modelos ARIMA.
+
+- Preferencia de los modelos de series de tiempo.
+
+
+# Metodología básica
+
+- **Definición del problema**: ¿qué es lo que se quiere pronosticar?
+- **Recolectar información**: estadística y experticia de las personas que obtienen los datos o utilizan los pronósticos.
+- **Análisis exploratorio preliminar**: ¡debemos graficar los datos!
+- **Elección y ajuste de modelos**: dependen de la disponibilidad de los datos y la forma en que se usarán los pronósticos.
+- **Utilización y evaluación de los pronósticos**: evaluamos el desempeño de nuestros modelos utilizando diferentes métodos y métricas.
+
+PRESENTACIÓN PENDIENTE
+----
+
+```{r}
+library(tidyverse)
+
+ipc <- read_csv("data/IPC_Guatemala.csv");
+aguacate <- ts(ipc$Aguacate, start = c(2010, 12), frequency = 12, names = "Aguacate")
+aguacate %>% autoplot()
+```
+
+```{r}
+# Gráfica estacional
+aguacate %>% ggseasonplot(year.labels=TRUE, year.labels.left=TRUE) 
+```
+
+# Método de promedio
+
+- Se pronostican todos los valores futuros utilizando la **media histórica** de las observaciones.
+
+```{r}
+# Método simple de promedio
+meanf(aguacate, h = 6)
+```
+
+```{r}
+aguacate %>% 
+  meanf(h=6) %>% 
+  autoplot()
+```
+
+```{r}
+aguacate %>% 
+  naive(h=6) %>% 
+  autoplot()
+```
+
+
+```{r}
+aguacate %>% 
+  snaive(h=6) %>% 
+  autoplot()
+```
+
+```{r}
+aguacate %>% 
+  rwf(h=6, drift = TRUE) %>% 
+  autoplot()
+```
+
+```{r}
+autoplot(aguacate) +
+  autolayer(meanf(aguacate, h=12),
+    series="Promedio", PI=FALSE) +
+  autolayer(rwf(aguacate, h=12),
+    series="Naïve (ingenuo)", PI=FALSE) +
+  autolayer(rwf(aguacate, drift=TRUE, h=12),
+    series="Tendencia", PI=FALSE) +
+  ggtitle("Pronósticos de precios del aguacate en Guatemala")
+```
+
+```{r}
+lambda <- BoxCox.lambda(aguacate)
+autoplot(BoxCox(aguacate,lambda))
+```
+
+```{r}
+aguacate %>% 
+  ses(h = 6) %>% 
+  autoplot()
+```
+
+
+```{r}
+fc <- ses(aguacate, h = 6)
+autoplot(fc) +
+  autolayer(fitted(fc), series="Ajustados") 
+```
+
+```{r}
+fc <- holt(aguacate, h=6)
+autoplot(fc) +
+  autolayer(fitted(fc), series="Ajustados") 
+```
+
+```{r}
+fc <- holt(aguacate, h = 6)
+fc2 <- holt(aguacate, h = 6, damped = TRUE, phi = 0.9)
+autoplot(aguacate) +
+  autolayer(fc, series="Método de Holt", PI=FALSE) +
+  autolayer(fc2, series="Holt suavizado", PI=FALSE)
+```
+
+```{r}
+fit1 <- hw(aguacate, seasonal="additive", h = 6)
+fit2 <- hw(aguacate, seasonal="multiplicative", h = 6, damped = TRUE, phi = 0.95)
+autoplot(aguacate) +
+  autolayer(fit1, series="HW additive forecasts", PI=FALSE) +
+  autolayer(fit2, series="HW multiplicative forecasts", PI=FALSE)
+```
+
+
+```{r}
+aguacate %>% stl(s.window='periodic') %>% seasadj() -> aguacate_adj
+autoplot(aguacate_adj)
+```
+
+```{r}
+aguacate_adj %>% diff() %>% ggtsdisplay()
+```
+
+```{r}
+arima.model <- auto.arima(aguacate_adj)
+forecast(arima.model, h = 6)
+```
+
+```{r}
+autoplot(aguacate) + 
+  autolayer(forecast(arima.model), series= "Modelo ARIMA")
+```
+
+```{r}
+checkresiduals(arima.model)
+```
+
+
+
+```{r}
+diff(log(aguacate)) %>% ggtsdisplay()
+```
+
+```{r}
+autoplot(log(aguacate))
+```
+
