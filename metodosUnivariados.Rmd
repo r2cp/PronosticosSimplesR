@@ -234,7 +234,7 @@ frutas %>%
 ## Pronóstico "ingenuo"
 
 - Es un método informal en el que fijamos los pronósticos en la última observación:  
-$$\hat{y}_{T+h|T} = y_{T}.$$ 
+$$\hat{y}_{T+h|T} = y_{T}.$$
 ```{r naive_method}
 naive(frutas, h = 6)
 ```
@@ -285,12 +285,11 @@ frutas %>%
 
 ```{r base_methods_comparison}
 autoplot(frutas) +
-  autolayer(meanf(frutas, h=12),
-    series="Promedio", PI=FALSE) +
-  autolayer(rwf(frutas, h=12),
-    series="Naïve (ingenuo)", PI=FALSE) +
-  autolayer(rwf(frutas, drift=TRUE, h=12),
-    series="Tendencia", PI=FALSE) +
+  autolayer(meanf(frutas, h=12), series="Promedio", PI=FALSE) +
+  autolayer(rwf(frutas, h=12), 
+            series="Naïve (ingenuo)", PI=FALSE) +
+  autolayer(rwf(frutas, drift=TRUE, h=12), 
+            series="Tendencia", PI=FALSE) +
   ggtitle("Pronósticos de precios del frutas en Guatemala")
 ```
 
@@ -334,64 +333,219 @@ ses(frutas, h=6)
   autoplot()
 ```
 
+---- 
 
-<!-- ```{r} -->
-<!-- fc <- ses(frutas, h = 6) -->
-<!-- autoplot(fc) + -->
-<!--   autolayer(fitted(fc), series="Ajustados")  -->
-<!-- ``` -->
+- El valor de pronóstico constante puede parecer **trivial**, pero cuando la serie de tiempo es **estacionaria**, es de hecho el pronóstico óptimo$^*$. 
 
-<!-- ```{r} -->
-<!-- fc <- holt(frutas, h=6) -->
-<!-- autoplot(fc) + -->
-<!--   autolayer(fitted(fc), series="Ajustados")  -->
-<!-- ``` -->
+<!-- - Consideremos si vemos el último año de la serie de precios. -->
 
-<!-- ```{r} -->
-<!-- fc <- holt(frutas, h = 6) -->
-<!-- fc2 <- holt(frutas, h = 6, damped = TRUE, phi = 0.9) -->
-<!-- autoplot(frutas) + -->
-<!--   autolayer(fc, series="Método de Holt", PI=FALSE) + -->
-<!--   autolayer(fc2, series="Holt suavizado", PI=FALSE) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- fit1 <- hw(frutas, seasonal="additive", h = 6) -->
-<!-- fit2 <- hw(frutas, seasonal="multiplicative", h = 6, damped = TRUE, phi = 0.95) -->
-<!-- autoplot(frutas) + -->
-<!--   autolayer(fit1, series="HW additive forecasts", PI=FALSE) + -->
-<!--   autolayer(fit2, series="HW multiplicative forecasts", PI=FALSE) -->
-<!-- ``` -->
+```{r single_exp_smoothing_plot_zoom}
+frutas %>% window(start = 2019) %>%  ses(h = 6 ) %>% autoplot()
+```
 
 
-<!-- ```{r} -->
-<!-- frutas %>% stl(s.window='periodic') %>% seasadj() -> frutas_adj -->
-<!-- autoplot(frutas_adj) -->
-<!-- ``` -->
+<!-- # ```{r} -->
+<!-- # fc <- ses(frutas, h = 6) -->
+<!-- # autoplot(fc) + -->
+<!-- #   autolayer(fitted(fc), series="Ajustados") -->
+<!-- # ``` -->
 
-<!-- ```{r} -->
-<!-- frutas_adj %>% diff() %>% ggtsdisplay() -->
-<!-- ``` -->
+# Método de tendencia de Holt
 
-<!-- ```{r} -->
-<!-- arima.model <- auto.arima(frutas_adj) -->
-<!-- forecast(arima.model, h = 6) -->
-<!-- ``` -->
+- Holt (1957) extendió el método de suavizamiento exponencial para pronosticar datos con tendencia. 
 
-<!-- ```{r} -->
-<!-- autoplot(frutas) +  -->
-<!--   autolayer(forecast(arima.model), series= "Modelo ARIMA") -->
-<!-- ``` -->
+- Involucra una **ecuación de pronóstico** y dos **ecuaciones de suavizamiento**: 
+$$ \begin{align*}
+  \text{Pronóstico}&& \hat{y}_{t+h|t} &= \ell_{t} + hb_{t} \\
+  \text{Nivel}   && \ell_{t} &= \alpha y_{t} + (1 - \alpha)(\ell_{t-1} + b_{t-1})\\
+  \text{Tendencia}   && b_{t}    &= \beta^*(\ell_{t} - \ell_{t-1}) + (1 -\beta^*)b_{t-1},
+\end{align*}$$
 
-<!-- ```{r} -->
-<!-- checkresiduals(arima.model) -->
-<!-- ``` -->
+- Los pronósticos dependen del último nivel estimado y $h$ veces el último valor estimado de la tendencia.
 
-<!-- ```{r} -->
-<!-- diff(log(frutas)) %>% ggtsdisplay() -->
+---- 
+
+```{r holt_method}
+holt(frutas, h = 6)
+```
+
+---- 
+
+```{r holt_method_plot}
+frutas %>% 
+  holt(h = 6) %>% 
+  autoplot()
+```
+
+## Suavización
+
+$$\begin{align*}
+  \hat{y}_{t+h|t} &= \ell_{t} + (\phi+\phi^2 + \dots + \phi^{h})b_{t} \\
+  \ell_{t} &= \alpha y_{t} + (1 - \alpha)(\ell_{t-1} + \phi b_{t-1})\\
+  b_{t} &= \beta^*(\ell_{t} - \ell_{t-1}) + (1 -\beta^*)\phi b_{t-1}.
+\end{align*}$$
+
+---- 
+
+```{r holt_damped_comparison}
+h1 <- holt(frutas, h = 6)
+h2 <- holt(frutas, h = 6, damped = TRUE, phi = 0.9)
+autoplot(frutas) +
+  autolayer(h1, series="Método de Holt", PI=FALSE) +
+  autolayer(h2, series="Holt suavizado", PI=FALSE)
+```
+
+
+# Método estacional de Holt-Winters
+
+- Holt y Winters extendieron el método original de Holt para capturar estacionalidad.
+
+- Involucra una **ecuación de pronóstico** y tres **ecuaciones de suavizamiento**.
+
+- Existe una versión **multiplicativa** y una versión **aditiva**.
+
+  - Estacionalidad aumenta con el nivel $\Rightarrow$ multiplicativo.
+  
+  - Estacionalidad "independiente" $\Rightarrow$ aditivo.
+  
+## Versión aditiva 
+
+$$ \begin{align*}
+  \text{Pronóstico}&& \hat{y}_{t+h|t} &= \ell_{t} + hb_{t} + s_{t+h-m(k+1)} \\ 
+  \text{Nivel}   && \ell_{t} &= \alpha(y_{t} - s_{t-m}) + (1 - \alpha)(\ell_{t-1} + b_{t-1})\\
+  \text{Tendencia}   && b_{t} &= \beta^*(\ell_{t} - \ell_{t-1}) + (1 - \beta^*)b_{t-1}\\ 
+  \text{Estación} && s_{t} &= \gamma (y_{t}-\ell_{t-1}-b_{t-1}) + (1-\gamma)s_{t-m}
+\end{align*}$$
+
+```{r hw_season_add}
+hw(frutas, seasonal="additive", h = 6)
+```
+
+## Versión multiplicativa 
+
+$$\begin{align*}
+  \hat{y}_{t+h|t} &= (\ell_{t} + hb_{t})s_{t+h-m(k+1)} \\
+  \ell_{t} &= \alpha \frac{y_{t}}{s_{t-m}} + (1 - \alpha)(\ell_{t-1} + b_{t-1})\\
+  b_{t} &= \beta^*(\ell_{t}-\ell_{t-1}) + (1 - \beta^*)b_{t-1}                \\
+  s_{t} &= \gamma \frac{y_{t}}{(\ell_{t-1} + b_{t-1})} + (1 - \gamma)s_{t-m}
+\end{align*}$$
+
+```{r hw_season_mult}
+hw(frutas, seasonal = "multiplicative", h = 6)
+```
+
+---- 
+
+```{r hw_season_comparison}
+fit1 <- hw(frutas, seasonal="additive", h = 6)
+fit2 <- hw(frutas, seasonal="multiplicative", h = 6)
+autoplot(frutas) +
+  autolayer(fit1, series="HW aditivo", PI=FALSE) +
+  autolayer(fit2, series="HW multiplicativo", PI=FALSE) + 
+  ggtitle("Comparación entre estacionalidad aditiva y multiplicativa")
+```
+
+---- 
+
+```{r load_saws, include=FALSE}
+saws <- read_csv("data/Saws.csv")
+saws <- ts(saws, start = 2000, frequency = 4)
+saws
+```
+
+
+```{r hw_season_comparison_saws}
+fit1 <- hw(saws, seasonal="additive", h = 6)
+fit2 <- hw(saws, seasonal="multiplicative", h = 6)
+autoplot(saws) +
+  autolayer(fit1, series="HW aditivo", PI=FALSE) +
+  autolayer(fit2, series="HW multiplicativo", PI=FALSE) + 
+  ggtitle("Comparación entre estacionalidad aditiva y multiplicativa")
+```
+
+# Métodología Box-Jenkins y modelos ARIMA
+ 
+  - Modelos autorregresivos (AR)
+  - Integrados (I)
+  - de medias móviles (MA)
+  
+  - **Métodología Box-Jenkins**: identificación de modelos ARIMA para una serie de tiempo.
+      - Proceso iterativo.
+      - `forecast` provee funciones de ajuste automático.
+      
+  - "... en esencia, todos los modelos están equivocados, pero algunos son útiles ..."
+
+
+## 1. Ajuste de estacionalidad
+
+```{r season_adjust}
+frutas %>% stl(s.window='periodic') %>% seasadj() -> frutas_adj
+autoplot(frutas_adj)
+```
+
+## 2. Análisis de estructura con ACF y PACF
+
+```{r structure_analysis}
+frutas_adj %>% diff() %>% ggtsdisplay()
+```
+
+## 3. Especificación de modelo
+
+```{r model_spec_auto_arima}
+arima.model <- auto.arima(frutas_adj)
+forecast(arima.model, h = 6)
+```
+
+## 4. Análisis de residuos
+
+```{r residuals_check}
+checkresiduals(arima.model)
+```
+
+## 5. Utilización del modelo
+
+```{r arima_model_use}
+autoplot(frutas) +
+  autolayer(forecast(arima.model, h = 6), series= "Modelo ARIMA")
+```
+
+<!-- # ```{r} -->
+<!-- # # Transformación posible para el modelo ARIMA -->
+<!-- # diff(log(frutas)) %>% ggtsdisplay() -->
 <!-- ``` -->
 
 <!-- ```{r} -->
 <!-- autoplot(log(frutas)) -->
 <!-- ``` -->
+
+# Evaluación de pronósticos
+
+- Reservamos dos partes de la muestra: **entrenamiento** y **prueba**
+
+- Calculamos los errores de pronóstico: $$ e_{T+h} = y_{T+h} - \hat{y}_{T+h|T} $$, donde los datos de entrenamiento son $ \{y_1,\dots,y_T\} $ y los datos de prueba $ \{y_{T+1},y_{T+2},\dots\} $. 
+
+- Obtenemos **métricas** sobre el conjunto de errores de pronóstico.
+
+
+## Métricas de evaluación
+
+- Precisión:
+$$
+\begin{align*}
+  \text{Mean absolute error: MAE} & = \text{mean}(|e_{t}|),\\
+  \text{Root mean squared error: RMSE} & = \sqrt{\text{mean}(e_{t}^2)}.
+\end{align*}$$
+
+- Sesgo: 
+
+
+
+## Ajuste y evaluación
+
+```{r}
+
+```
+
+
+
 
