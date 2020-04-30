@@ -8,8 +8,8 @@ output:
     theme: simple
     highlight: tango
     center: false
-    fig_width: 7
-    fig_height: 5
+    fig_width: 6.5
+    fig_height: 4.5
     self_contained: false
     reveal_plugins: ["zoom", "chalkboard"]
     reveal_options:
@@ -80,7 +80,7 @@ $$ DE_{t+1} = f(DE_t, DE_{t-1}, DE_{t-2}, \ldots, \text{error})$$
 
 
 
-# Metodología de pronósitco
+# Metodología de pronóstico
 
 - **Definición del problema**: ¿qué es lo que se quiere pronosticar?
 - **Recolectar información**: estadística y experticia de las personas que obtienen los datos o utilizan los pronósticos.
@@ -208,9 +208,15 @@ autoplot(pib_trim)
 
 
 
-# Métodos de pronóstico
+# Métodos de pronóstico base
 
 - Veamos algunos métodos de pronósticos, que a pesar de ser simples, pueden ser muy efectivos en ocasiones.
+
+  - Método de **promedio histórico**.
+  - Método de **pronóstico ingenuo** (*naïve*)
+  - Método de **tendencia**. 
+
+- A veces, con estos métodos es suficiente, pero en general, sirven como referencia para asegurarnos que **métodos más sofisticados son mejores** que estas alternativas simples. 
 
 
 ## Promedio histórico
@@ -286,11 +292,10 @@ frutas %>%
 ```{r base_methods_comparison}
 autoplot(frutas) +
   autolayer(meanf(frutas, h=12), series="Promedio", PI=FALSE) +
-  autolayer(rwf(frutas, h=12), 
-            series="Naïve (ingenuo)", PI=FALSE) +
+  autolayer(rwf(frutas, h=12), series="Naïve", PI=FALSE) +
   autolayer(rwf(frutas, drift=TRUE, h=12), 
             series="Tendencia", PI=FALSE) +
-  ggtitle("Pronósticos de precios del frutas en Guatemala")
+  ggtitle("Pronósticos de índices de precios de frutas en Guatemala")
 ```
 
 <!-- ```{r boxcox_transform} -->
@@ -379,6 +384,12 @@ frutas %>%
 
 ## Suavización
 
+- El método de Holt provee pronósticos con una tendencia constante.
+
+- Usualmente, esto tiende a **sobreestimar** para pronósticos más largos.
+
+- Una forma de mitigar esto es con un parámetro $\phi$ de suavizamiento (Gardner y McKenzie 1985)
+
 $$\begin{align*}
   \hat{y}_{t+h|t} &= \ell_{t} + (\phi+\phi^2 + \dots + \phi^{h})b_{t} \\
   \ell_{t} &= \alpha y_{t} + (1 - \alpha)(\ell_{t-1} + \phi b_{t-1})\\
@@ -465,15 +476,16 @@ autoplot(saws) +
 
 # Métodología Box-Jenkins y modelos ARIMA
  
-  - Modelos autorregresivos (AR)
-  - Integrados (I)
-  - de medias móviles (MA)
-  
   - **Métodología Box-Jenkins**: identificación de modelos ARIMA para una serie de tiempo.
       - Proceso iterativo.
       - `forecast` provee funciones de ajuste automático.
       
   - "... en esencia, todos los modelos están equivocados, pero algunos son útiles ..."
+  
+      - Modelos autorregresivos (AR)
+      - Integrados (I)
+      - de medias móviles (MA)
+  
 
 
 ## 1. Ajuste de estacionalidad
@@ -522,30 +534,132 @@ autoplot(frutas) +
 
 - Reservamos dos partes de la muestra: **entrenamiento** y **prueba**
 
-- Calculamos los errores de pronóstico: $$ e_{T+h} = y_{T+h} - \hat{y}_{T+h|T} $$, donde los datos de entrenamiento son $ \{y_1,\dots,y_T\} $ y los datos de prueba $ \{y_{T+1},y_{T+2},\dots\} $. 
+- Calculamos los errores de pronóstico: $$ e_{T+h} = y_{T+h} - \hat{y}_{T+h|T} $$, donde los datos de entrenamiento son $\{y_1,\dots,y_T\}$ y los datos de prueba $\{y_{T+1},y_{T+2},\dots\}$. 
 
-- Obtenemos **métricas** sobre el conjunto de errores de pronóstico.
+- Obtenemos **métricas** sobre el conjunto de errores de pronóstico. El modelo que minimice estas mediciones es el "ganador".
+
+- Se puede esperar que una buena técnica de pronóstico produzca errores pequeños consistentemente.
 
 
 ## Métricas de evaluación
 
-- Precisión:
+- Precisión: ¿qué tanto nos equivocamos?
 $$
 \begin{align*}
-  \text{Mean absolute error: MAE} & = \text{mean}(|e_{t}|),\\
-  \text{Root mean squared error: RMSE} & = \sqrt{\text{mean}(e_{t}^2)}.
+  \text{Mean absolute error: MAE} & = \text{promedio}(|e_{t}|),\\
+  \text{Root mean squared error: RMSE} & = \sqrt{\text{promedio}(e_{t}^2)}.
 \end{align*}$$
 
-- Sesgo: 
+- Sesgo: ¿subestimamos o sobreestimamos?
+$$
+\begin{align*}
+  \text{Mean error: ME} & = \text{promedio}(e_{t}), \\
+  \text{Mean percentage error: MPE} & = \text{promedio}\left(\frac{y_{T+h} - \hat{y}_{T+h|T}}{\hat{y}_{T+h|T}} \right).
+\end{align*}$$
 
 
+----
 
-## Ajuste y evaluación
+- Obtenemos el conjunto de datos de identificación y ajuste (entrenamiento).
 
-```{r}
+```{r plot_train_test}
+saws_train <- window(saws, start=2000, end=c(2005,4))
+autoplot(saws) + 
+  autolayer(saws_train, series="Entrenamiento")
+```
 
+---- 
+
+```{r plot_base_models_forecast}
+sawsfit1 <- meanf(saws_train, h=4)
+sawsfit2 <- rwf(saws_train, h=4)
+sawsfit3 <- snaive(saws_train, h=4)
+autoplot(saws) +
+  autolayer(sawsfit1, series="Promedio", PI=FALSE) +
+  autolayer(sawsfit2, series="Ingenuo", PI=FALSE) +
+  autolayer(sawsfit3, series="Estacional", PI=FALSE) + 
+  ggtitle("Pronósticos para ventas trimestrales de sierras")
+```
+
+----
+
+- Obtenemos el conjunto de prueba: 
+
+```{r split_test_data}
+saws_test <- window(saws, start = 2006)
+```
+
+- Computamos las métricas:
+```{r full_accuracy_metrics}
+accuracy(sawsfit1, saws_test)
+```
+
+
+## Comparación de métricas
+
+<!-- Comparación de métricas -->
+
+```{r general_mean_forecast_metrics}
+metricas <- c("MAE", "RMSE", "ME", "MPE")
+accuracy(sawsfit1, saws_test)["Test set", metricas]
+```
+
+```{r random_walk_forecast_metrics}
+accuracy(sawsfit2, saws_test)["Test set", metricas]
+```
+
+```{r snaive_forecast_metrics}
+accuracy(sawsfit3, saws_test)["Test set", metricas]
+```
+
+
+## Modelo ¿multiplicativo o aditivo?
+
+```{r hw_add_mult_comparison}
+hw.add <- hw(saws_train, seasonal="additive", h = 4)
+hw.mult <- hw(saws_train, seasonal="multiplicative", h = 4)
+autoplot(saws) +
+  autolayer(hw.add, series="HW aditivo", PI=FALSE) +
+  autolayer(hw.mult, series="HW multiplicativo", PI=FALSE) +
+  ggtitle("Pronósticos para ventas trimestrales de sierras con HW")
+```
+
+## Comparación de métricas
+
+```{r hw_add_accuracy}
+accuracy(hw.add, saws_test)[, metricas]
+```
+
+```{r hw_mult_accuracy}
+accuracy(hw.mult, saws_test)[, metricas]
 ```
 
 
 
+# Conclusiones
 
+- Existen diferentes técnicas cuantitativas para pronosticar: 
+  - Pronosticar es una **disciplina** y un **arte** 
+  <!-- - [Instituto Internacional de Pronosticadores](https://forecasters.org/) -->
+  - [Competencia M4](https://forecasters.org/resources/time-series-data/m4-competition/), ¡100,000 series y muchos métodos de pronóstico!
+  - Algoritmos de aprendizaje automático (*machine learning*)
+  
+- Existen diferentes métricas y procedimientos de validación
+  - Validación cruzada para series de tiempo.
+
+- R es una herramienta fantástica análisis de datos y pronósticos
+  - `tidyverse`.
+  - muchos otros paquetes para la aplicación que se te ocurra.
+  
+
+
+# Referencias y material adicional
+
+- Hanke, J. E., & Wichern, D. W. (2009). Pronósticos en los negocios 9a. Edición.
+
+- Hyndman, R.J., & Athanasopoulos, G. (2018) Forecasting: principles and practice, 2nd edition, OTexts: Melbourne, Australia. OTexts.com/fpp2. Consultado en abril de 2020.
+
+  - [Forecasting: Principles and Practice](https://otexts.com/fpp2/)
+
+- Repositorio de la presentación y el código:
+  - [https://github.com/rafaelchp/PronosticosSimplesR](https://github.com/rafaelchp/PronosticosSimplesR)
